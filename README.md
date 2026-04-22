@@ -28,9 +28,9 @@ It combines **multi-chain data**, **AI intelligence**, and **real-time alerts** 
 
 ```mermaid
 flowchart TD
-    A[User / Trader] --> B[ArbiX Dashboard / Telegram]
+    A[User or Trader] --> B[Dashboard or Telegram]
 
-    B --> C[Data Collector Layer]
+    B --> C[Data Collector]
 
     C --> D1[CoinGecko API]
     C --> D2[Uniswap]
@@ -42,7 +42,7 @@ flowchart TD
     D3 --> E
     D4 --> E
 
-    E --> F[AI Agent (OpenRouter + Grok)]
+    E --> F[AI Agent OpenRouter Grok]
 
     F --> G1[Detect Price Gaps]
     F --> G2[Calculate Profit]
@@ -52,7 +52,7 @@ flowchart TD
     G2 --> H
     G3 --> H
 
-    H --> I{Profitable?}
+    H --> I{Profitable}
 
     I -->|Yes| J[Send Alert]
     I -->|No| K[Discard]
@@ -60,13 +60,13 @@ flowchart TD
     J --> L[Telegram Bot]
     J --> M[Dashboard]
 
-    L --> N[User Executes Trade]
+    L --> N[Execute Trade]
     M --> N
 ```
 
 ---
 
-# ⚡ Real-Time Detection Flow (Sequence)
+# ⚡ Real-Time Detection Flow
 
 ```mermaid
 sequenceDiagram
@@ -99,23 +99,23 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[Token Price Chain A] --> C[Compare]
-    B[Token Price Chain B] --> C
+    A[Price Chain A] --> C[Compare]
+    B[Price Chain B] --> C
 
-    C --> D{Price Gap?}
+    C --> D{Price Gap}
 
     D -->|No| E[Ignore]
     D -->|Yes| F[Calculate Fees]
 
     F --> G[Gas]
-    F --> H[Bridge Cost]
+    F --> H[Bridge]
     F --> I[Slippage]
 
     G --> J[Net Profit]
     H --> J
     I --> J
 
-    J --> K{Profit > 0?}
+    J --> K{Profit Positive}
 
     K -->|Yes| L[Send Signal]
     K -->|No| M[Reject]
@@ -129,12 +129,12 @@ flowchart LR
 flowchart TB
     subgraph Frontend
         A1[React Dashboard]
-        A2[Telegram Bot UI]
+        A2[Telegram UI]
     end
 
     subgraph Backend
-        B1[Node.js / Python]
-        B2[WebSockets]
+        B1[API Server]
+        B2[WebSocket]
     end
 
     subgraph Data
@@ -175,27 +175,27 @@ flowchart TB
 
 ---
 
-# 💬 Chat-Style Flow (User Experience)
+# 💬 User Flow
 
 ```mermaid
 flowchart TD
     U[User] --> A[ArbiX Bot]
 
-    A --> B["🔍 Scanning markets..."]
-    B --> C["Checking ETH, SOL, BNB"]
+    A --> B[Scanning markets]
+    B --> C[Checking chains]
 
-    C --> D["🤖 AI analyzing"]
+    C --> D[AI analyzing]
 
-    D --> E{Opportunity found?}
+    D --> E{Opportunity found}
 
-    E -->|Yes| F["💰 Arbitrage Found!"]
-    E -->|No| G["No trade"]
+    E -->|Yes| F[Arbitrage Found]
+    E -->|No| G[No trade]
 
-    F --> H["Buy"]
-    H --> I["Bridge"]
-    I --> J["Sell"]
+    F --> H[Buy]
+    H --> I[Bridge]
+    I --> J[Sell]
 
-    J --> K["📈 Profit Delivered"]
+    J --> K[Profit delivered]
 
     G --> B
 ```
@@ -206,13 +206,13 @@ flowchart TD
 
 **Frontend:** React.js, TailwindCSS
 **Backend:** Node.js / Python
-**Data:** WebSockets, REST APIs
+**Data Layer:** WebSockets, REST APIs
 
 **Chains:** Ethereum, Solana, BNB Chain
 **DEXs:** Uniswap, Jupiter, PancakeSwap
 **CEX Data:** CoinGecko API
 
-**AI:** OpenRouter + Grok
+**AI:** OpenRouter, Grok
 
 **Integrations:** Telegram Bot, MetaMask, Phantom
 
@@ -239,7 +239,7 @@ flowchart TD
 
 * Crypto traders
 * DeFi users
-* Algo traders
+* Algorithmic traders
 * Beginners
 
 ---
@@ -250,16 +250,17 @@ flowchart TD
 * True cross-chain support
 * Hybrid CEX + DEX
 * Real profit signals
-* Instant execution alerts
+* Instant alerts
 
 ---
 
 ## 🔮 Roadmap
 
-* Auto-execution (smart contracts)
-* More exchanges (Binance, Bybit)
+* Auto-execution via smart contracts
+* More exchanges (Binance, Bybit, Kraken)
 * Mobile app
 * Strategy marketplace
+* On-chain analytics
 
 ---
 
@@ -287,11 +288,40 @@ TELEGRAM_BOT_TOKEN=your_token
 
 ## 📲 Usage
 
-1. Start backend
-2. Run frontend
-3. Connect wallet
+1. Start backend server
+2. Run frontend dashboard
+3. Connect wallet (MetaMask / Phantom)
 4. Enable Telegram bot
-5. Receive signals
+5. Receive arbitrage signals
+
+---
+
+## 📈 Example Signal
+
+```
+Token: ETH
+Buy: Uniswap
+Sell: Jupiter
+Profit: +2.3%
+Fees Included: Yes
+Confidence: High
+```
+
+---
+
+## 🤝 Contributing
+
+```bash
+git checkout -b feature/your-feature
+git commit -m "Add feature"
+git push origin feature/your-feature
+```
+
+---
+
+## 📄 License
+
+MIT License
 
 ---
 
