@@ -514,6 +514,10 @@ const barToDays = {
   '1H': 1, '4H': 7, '1D': 30, '1W': 90, '1M': 365,
 };
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 app.get('/api/market-chart/:chainIndex/:tokenContractAddress', marketRateLimiter, marketCacheShort, async (req, res) => {
   const { chainIndex, tokenContractAddress } = req.params;
   const { bar = '1D' } = req.query;
