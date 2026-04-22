@@ -8,7 +8,21 @@ import { ArrowUpDown } from 'lucide-react';
 import LandingNav from '@/components/LandingNav';
 import { useRouter } from 'next/navigation';
 
-const tokenMap = {
+type MarketToken = {
+  token?: {
+    tokenContractAddress?: string;
+    chainIndex?: string | number;
+  };
+  result?: {
+    price?: number | string;
+    marketCap?: number | string;
+    volume24H?: number | string;
+  };
+};
+
+type SortField = keyof NonNullable<MarketToken['result']>;
+
+const tokenMap: Record<string, string> = {
   'so11111111111111111111111111111111111111112':'SOL',
   '0x382bb369d343125bfb2117af9c149795c6c65c50': 'HT',
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
@@ -33,17 +47,17 @@ const tokenMap = {
 
 export default function MarketTokenPage() {
   const router = useRouter();
-  const [tokens, setTokens] = useState([]);
-  const [filteredTokens, setFilteredTokens] = useState([]);
+  const [tokens, setTokens] = useState<MarketToken[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<MarketToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await axios.get('http://localhost:3000/market-token');
+        const res = await axios.get<MarketToken[]>('http://localhost:3000/market-token');
         setTokens(res.data);
         setFilteredTokens(res.data);
       } catch (err) {
@@ -66,7 +80,7 @@ export default function MarketTokenPage() {
     );
   }, [search, tokens]);
 
-  const handleSort = (field) => {
+  const handleSort = (field: SortField) => {
     const asc = sortField === field ? !sortAsc : true;
     setSortField(field);
     setSortAsc(asc);
@@ -77,7 +91,7 @@ export default function MarketTokenPage() {
     }));
   };
 
-  const parseNumber = (value) => {
+  const parseNumber = (value: number | string | undefined) => {
     if (typeof value === 'number') return value;
     if (typeof value === 'string') {
       const cleaned = value.replace(/[^0-9.]/g, '');
@@ -86,7 +100,7 @@ export default function MarketTokenPage() {
     return 0;
   };
 
-  const formatCurrency = (value) => {
+  const formatCurrency = (value: number | string | undefined) => {
     const number = parseNumber(value);
     if (number === 0) return '$0';
     return new Intl.NumberFormat('en-US', {
@@ -99,7 +113,8 @@ export default function MarketTokenPage() {
     }).format(number);
   };
 
-  const handleTokenClick = (chainIndex, address) => {
+  const handleTokenClick = (chainIndex: string | number | undefined, address: string | undefined) => {
+    if (chainIndex === undefined || !address) return;
     router.push(`/tokendetails/${chainIndex}/${encodeURIComponent(address)}`);
   };
 
@@ -124,7 +139,7 @@ export default function MarketTokenPage() {
               <TableHead className="border-r border-gray-300 dark:border-gray-700 dark:text-gray-300 px-4 py-3">
                 Token Name
               </TableHead>
-              {['price', 'marketCap', 'volume24h'].map((field) => (
+              {(['price', 'marketCap', 'volume24H'] as SortField[]).map((field) => (
                 <TableHead
                   key={field}
                   className="border-r border-gray-300 dark:border-gray-700 cursor-pointer select-none dark:text-gray-300 px-4 py-3"

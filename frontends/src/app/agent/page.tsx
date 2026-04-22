@@ -331,14 +331,14 @@ export default function ArbixAgentPage() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-purple-500/15 to-sky-500/10 p-5">
+                {/* <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-purple-500/15 to-sky-500/10 p-5">
                   <div className="text-sm text-white/60">How it works</div>
                   <ul className="mt-4 space-y-3 text-sm leading-6 text-white/80">
                     <li>1. The page calls your backend signal API for each tracked symbol.</li>
                     <li>2. Signals are ranked by spread so the strongest routes float to the top.</li>
                     <li>3. The backend AI endpoint turns the best set into a concise trading brief.</li>
                   </ul>
-                </div>
+                </div> */}
               </aside>
             </div>
           </div>
