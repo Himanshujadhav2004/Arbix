@@ -1,6 +1,25 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 
+import { VersionedTransaction } from '@solana/web3.js';
+
+// Define the shape of the OKX Solana provider instead of using 'any'
+interface OKXSolanaProvider {
+  connect: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
+  disconnect: () => Promise<void>;
+  signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>;
+  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
+}
+
+declare global {
+  interface Window {
+    okxwallet?: {
+      solana: OKXSolanaProvider;
+    };
+  }
+}
+
+
 
 type WalletContextType = {
   publicKey: string | null;
