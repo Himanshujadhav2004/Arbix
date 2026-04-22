@@ -559,7 +559,7 @@ app.get('/api/market-chart/:chainIndex/:tokenContractAddress', marketRateLimiter
 // Uniswap subgraph (The Graph) — EVM chains only
 // Chain 501 (Solana) is intentionally excluded here; use /api/get-token-price instead
 // ---------------------------------------------------------------------------
-const API_KEY = 'afc914943ff24797a37853beeff3ca51';
+const API_KEY = process.env.UNISWAP_API_KEY;
 
 const chainIdToSubgraphId = {
   1:     '5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV',
