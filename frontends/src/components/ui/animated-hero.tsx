@@ -1,10 +1,8 @@
 "use client"
 import {  useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { MoveRight, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
-import Link from "next/link";
 
 
 function Hero() {

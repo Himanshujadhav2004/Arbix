@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import axios from "axios"
-import { Chart, registerables } from "chart.js"
-import { DateTime } from "luxon"
+import { Chart, registerables, type ChartConfiguration } from "chart.js"
 import "chartjs-adapter-luxon"
 import LandingNav from "../LandingNav"
 
@@ -41,6 +40,8 @@ interface UniswapTokenData {
   priceUSD: string
 }
 
+type ChartPoint = { x: Date; y: number }
+
 const intervals = ["1m", "5m", "15m", "30m", "1H", "4H", "1D"] as const
 
 export default function CryptoMarketChart({ chainindex, address }: CryptoChartProps) {
@@ -56,6 +57,7 @@ export default function CryptoMarketChart({ chainindex, address }: CryptoChartPr
   const [uniError, setUniError]             = useState<string | null>(null)
   const [error, setError]                   = useState<string | null>(null)
   const chartRef = useRef<HTMLCanvasElement>(null)
+  const chartInstanceRef = useRef<Chart<"line", ChartPoint[], Date> | null>(null)
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -169,16 +171,16 @@ export default function CryptoMarketChart({ chainindex, address }: CryptoChartPr
     const ctx = chartRef.current.getContext("2d")
     if (!ctx) return
 
-    if ((chartRef.current as any).chart) {
-      (chartRef.current as any).chart.destroy()
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.destroy()
     }
 
-    const dataset = chartData.map((d) => ({
-      x: DateTime.fromMillis(d.timestamp).toJSDate(),
+    const dataset: ChartPoint[] = chartData.map((d) => ({
+      x: new Date(d.timestamp),
       y: d.close,
     }))
 
-    const config: any = {
+    const config: ChartConfiguration<"line", ChartPoint[], Date> = {
       type: "line",
       data: {
         datasets: [
@@ -207,7 +209,7 @@ export default function CryptoMarketChart({ chainindex, address }: CryptoChartPr
             grid: { color: "rgba(255,255,255,0.1)" },
             ticks: {
               color: "#9CA3AF",
-              callback: (val: number) => `$${val.toFixed(2)}`,
+              callback: (tickValue) => `$${Number(tickValue).toFixed(2)}`,
             },
           },
         },
@@ -225,7 +227,7 @@ export default function CryptoMarketChart({ chainindex, address }: CryptoChartPr
     }
 
     const chartInstance = new Chart(ctx, config)
-    ;(chartRef.current as any).chart = chartInstance
+    chartInstanceRef.current = chartInstance
   }, [chartData])
 
   // -------------------------------------------------------------------------

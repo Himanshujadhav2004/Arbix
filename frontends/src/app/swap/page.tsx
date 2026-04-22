@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { useTheme } from 'next-themes';
 import { ArrowUpDown } from 'lucide-react';
 import { useWallet } from '@/contexts/WalletContext';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
@@ -25,7 +24,6 @@ export default function Swap() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { publicKey, connected, signTransaction } = useWallet();
-  const { theme } = useTheme();
 
   const swapTokens = () => {
     setTokenA(tokenB);
@@ -147,9 +145,9 @@ export default function Swap() {
 
       alert(`Swap successful! TX: ${signature}`);
       setAmount('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Full error:', error);
-      setError(error.message || 'Transaction failed');
+      setError(error instanceof Error ? error.message : 'Transaction failed');
     } finally {
       setLoading(false);
     }

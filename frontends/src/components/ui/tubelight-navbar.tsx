@@ -1,5 +1,6 @@
 'use client';
 
+import type { ComponentType } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { usePathname } from 'next/navigation';
 import { Menu, X, Moon, Sun } from 'lucide-react';
@@ -8,30 +9,31 @@ import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 
-export function NavBar({ items, className }) {
+type NavItem = {
+  name: string;
+  url: string;
+  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
+};
+
+type NavBarProps = {
+  items: NavItem[];
+  className?: string;
+};
+
+export function NavBar({ items, className }: NavBarProps) {
   const pathname = usePathname();
   const { publicKey, connect, disconnect } = useWallet();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      setIsDarkMode(true);
-    }
+    setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDarkMode]);
+  const isDarkMode = mounted ? resolvedTheme === 'dark' : true;
 
   return (
     <nav className={cn("fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-full border backdrop-blur-lg bg-background/30 shadow-sm transition-all mx-auto max-w-5xl w-[90%]", className)}>
@@ -85,7 +87,11 @@ export function NavBar({ items, className }) {
             </button>
           )}
             <Sun className="h-4 w-4" />
-            <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={setIsDarkMode} />
+            <Switch
+              id="dark-mode"
+              checked={isDarkMode}
+              onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+            />
             <Moon className="h-4 w-4" />
             <Label htmlFor="dark-mode" className="sr-only">Toggle dark mode</Label>
           </div>
@@ -152,7 +158,11 @@ export function NavBar({ items, className }) {
               )}
               <div className="flex items-center mt-2 space-x-2">
                 <Sun className="h-4 w-4" />
-                <Switch id="dark-mode-mobile" checked={isDarkMode} onCheckedChange={setIsDarkMode} />
+                <Switch
+                  id="dark-mode-mobile"
+                  checked={isDarkMode}
+                  onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                />
                 <Moon className="h-4 w-4" />
                 <Label htmlFor="dark-mode-mobile" className="sr-only">Toggle dark mode</Label>
               </div>

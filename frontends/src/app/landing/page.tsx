@@ -2,98 +2,16 @@
 import LandingNav from "@/components/LandingNav";
 import { FeaturesSectionWithHoverEffects } from "@/components/feature-section-with-hover-effects";
 import { GridPatternCard,GridPatternCardBody } from "@/components/ui/card-with-grid-ellipsis-pattern";
-import { TestimonialsSection } from "@/components/testimonials-with-marquee";
 import { Hero } from "@/components/ui/animated-hero";
 import Image from "next/image";
 
 
-// import {
-//   BellIcon,
-//   CalendarIcon,
-//   FileTextIcon,
-//   GlobeIcon,
-//   InputIcon,
-// } from "@radix-ui/react-icons";
-import { BentoCard, BentoGrid } from "@/components/ui/bento-grid";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
 import { Footer } from "@/components/Footer";
 import React from "react";
 
-const features = [
-  {
-    // Icon: FileTextIcon,
-    name: "Lowest Latency",
-    description: "Experience ultra-low latency AI technology for seamless, real-time interactions. Enjoy instant responses, minimal delays, and smooth performance in voice communication, automation, and virtual assistance. Enhance efficiency, engagement, and user experience with lightning-fast AI designed for intelligent and uninterrupted interactions across various applications.",
-    href: "/",
- 
-    background: <img className="absolute -right-20 -top-20 opacity-60" />,
-    className: "lg:row-start-1 lg:row-end-4 lg:col-start-2 lg:col-end-3",
-  },
-  {
-    // Icon: InputIcon,
-    name: "AI-Powered Call Assistant",
-    description: "Build intelligent AI assistants that manage phone calls with natural, human-like conversations. Automate customer interactions, answer queries, schedule appointments, and provide support effortlessly. Enhance communication, improve efficiency, and deliver a seamless calling experience with advanced AI-powered voice technology for your business..",
-    href: "/",
- 
-    background: <img className="absolute -right-20 -top-20 opacity-60" />,
-    className: "lg:col-start-1 lg:col-end-2 lg:row-start-1 lg:row-end-3",
-  },
-  {
-    // Icon: GlobeIcon,
-    name: "Multilingual",
-    description: "Supports 100+ languages and counting.",
-    href: "/",
- 
-    background: <img className="absolute -right-20 -top-20 opacity-60" />,
-    className: "lg:col-start-1 lg:col-end-2 lg:row-start-3 lg:row-end-4",
-  },
-  {
-    // Icon: CalendarIcon,
-    name: "Call Automation",
-    description: "Automate both inbound and outbound calls to increase efficiency and reach.",
-    href: "/",
- 
-    background: <img className="absolute -right-20 -top-20 opacity-60" />,
-    className: "lg:col-start-3 lg:col-end-3 lg:row-start-1 lg:row-end-2",
-  },
-  {
-    // Icon: BellIcon,
-    name: "Notifications",
-    description:
-      "Receive instant notifications when your AI call agent answers a call, schedules an appointment, or needs your input. Stay informed about customer interactions, missed calls, and follow-ups in real time, ensuring seamless communication and improved responsiveness for your business." ,
-    href: "/",
- 
-    background: <img className="absolute -right-20 -top-20 opacity-60" />,
-    className: "lg:col-start-3 lg:col-end-3 lg:row-start-2 lg:row-end-4",
-  },
-];
-
 
 function LandingPage() {
-
-
-
-const testimonials = [
-    {
-      author: {
-        name: "Mr. Bhagat Agarwal",
-        handle: "CEO, MB Jewels",
-        avatar: "/assets/MB.jpg"
-      },
-      text: "Brabble.ai is a revolutionary product that India truly needs, transforming how businesses engage with their audience. We look forward to leveraging its potential to enhance customer outreach and drive innovation in the jewelry industry.",
-      href: "https://www.mbjewels.in/"
-    },
-    {
-      author: {
-        name: "Mr. Razi Khan",
-        handle: "CEO, ARK Tourism",
-        avatar: "/assets/ARK.jpg"
-      },
-      text: "I remember Shreyansh sharing his idea with me while working as a consultant, and we discussed the challenges of workforce shortages in the tourism industry. I really liked the concept behind Brabble.ai, and after testing the product, I see its immense potential..",
-      href: "https://twitter.com/davidtech"
-    }
-  ]
-
   return (
     
     <div className=" bg-white w-full dark:bg-background">
@@ -119,6 +37,19 @@ const testimonials = [
       <Hero></Hero>
       </GridPatternCard>
       
+    </div>
+
+    <div className="mx-auto mt-6 flex max-w-5xl items-center justify-center px-4">
+      <a
+        href="https://t.me/Abrix_agent_bot"
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-3 rounded-full border border-purple-500/30 bg-purple-500/10 px-5 py-3 text-sm font-medium text-purple-700 transition hover:bg-purple-500/20 dark:text-purple-200"
+      >
+        <span className="text-base">🤖</span>
+        Talk to the ArbiX Telegram bot
+        <span className="text-purple-500/80">→</span>
+      </a>
     </div>
 
     <div className="flex flex-col overflow-hidden pb-[50px] pt-[50px] dark:bg-background">

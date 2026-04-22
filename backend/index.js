@@ -2,18 +2,353 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const querystring = require('querystring');
+const Groq = require('groq-sdk');
 const { request, gql } = require('graphql-request');
+const { configDotenv } = require('dotenv');
+
+configDotenv(); // Load .env variables
 const {
   createTelegramBot,
   sendTelegramMessage,
   buildArbitrageSignal,
 } = require('./telegramBot');
 
+const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+const groqClient = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+
+function aiWait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildAiMessages({ prompt, systemPrompt, history } = {}) {
+  const messages = [];
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: String(systemPrompt) });
+  }
+
+  if (Array.isArray(history)) {
+    for (const item of history) {
+      if (!item || typeof item !== 'object') continue;
+      if (!item.role || !item.content) continue;
+      messages.push({ role: String(item.role), content: String(item.content) });
+    }
+  }
+
+  if (prompt) {
+    messages.push({ role: 'user', content: String(prompt) });
+  }
+
+  if (!messages.length) {
+    throw new Error('No prompt or messages provided');
+  }
+
+  return messages;
+}
+
+function isOpenRouterRateLimitError(error) {
+  const status = Number(error?.response?.status || 0);
+  const raw = String(
+    error?.response?.data?.error?.metadata?.raw ||
+    error?.response?.data?.error?.message ||
+    error?.message ||
+    ''
+  ).toLowerCase();
+
+  return status === 429 || raw.includes('rate-limit') || raw.includes('rate limit');
+}
+
+function getOpenRouterModelCandidates(requestedModel) {
+  const primary = String(requestedModel || OPENROUTER_MODEL || '').trim();
+  const envFallback = String(process.env.OPENROUTER_FALLBACK_MODELS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const groqFallbackFromEnv = String(process.env.OPENROUTER_GROQ_FALLBACK_MODEL || '').trim();
+
+  const defaults = [
+    'openrouter/free',
+    // Alternative free Groq-friendly candidate.
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'google/gemma-3n-e2b-it:free',
+    'google/gemma-4-26b-a4b-it:free',
+  ];
+
+  return [...new Set([primary, ...envFallback, ...defaults].filter(Boolean))];
+}
+
+async function askAiWithOpenRouter({ prompt, systemPrompt, history, model } = {}) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured');
+  }
+
+  const messages = buildAiMessages({ prompt, systemPrompt, history });
+
+  const modelCandidates = getOpenRouterModelCandidates(model);
+  const maxRetries = Math.max(1, Number(process.env.OPENROUTER_MAX_RETRIES) || 2);
+  let lastError = null;
+
+  for (const currentModel of modelCandidates) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await axios.post(
+          `${OPENROUTER_BASE_URL}/chat/completions`,
+          {
+            model: currentModel,
+            messages,
+            temperature: 0.3,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
+              'X-Title': 'ArbiX Backend',
+            },
+            timeout: 30000,
+          }
+        );
+
+        const choice = response.data?.choices?.[0];
+        const text = choice?.message?.content || '';
+        if (!text) {
+          throw new Error('OpenRouter returned an empty response');
+        }
+
+        return {
+          text,
+          model: response.data?.model || currentModel,
+          usage: response.data?.usage || null,
+        };
+      } catch (error) {
+        lastError = error;
+        const isRateLimited = isOpenRouterRateLimitError(error);
+
+        if (isRateLimited && attempt < maxRetries) {
+          await aiWait(600 * attempt);
+          continue;
+        }
+
+        if (isRateLimited) {
+          break;
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  if (isOpenRouterRateLimitError(lastError)) {
+    const rateLimitError = new Error('OpenRouter is temporarily rate-limited. Please retry shortly.');
+    rateLimitError.status = 429;
+    throw rateLimitError;
+  }
+
+  throw lastError || new Error('OpenRouter request failed');
+}
+
+async function askAiWithGroq({ prompt, systemPrompt, history, model } = {}) {
+  if (!groqClient) {
+    throw new Error('GROQ_API_KEY is not configured');
+  }
+
+  const messages = buildAiMessages({ prompt, systemPrompt, history });
+  const response = await groqClient.chat.completions.create({
+    model: model || GROQ_MODEL,
+    messages,
+    temperature: 0.3,
+  });
+
+  const text = response?.choices?.[0]?.message?.content || '';
+  if (!text) {
+    throw new Error('Groq returned an empty response');
+  }
+
+  return {
+    text,
+    model: response?.model || model || GROQ_MODEL,
+    usage: response?.usage || null,
+    provider: 'groq',
+  };
+}
+
+function shouldFallbackToGroq(error) {
+  const status = Number(error?.status || error?.response?.status || 0);
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    status === 429 ||
+    status >= 500 ||
+    message.includes('openrouter') ||
+    message.includes('provider returned error') ||
+    message.includes('temporarily rate-limited') ||
+    message.includes('openrouter_api_key')
+  );
+}
+
+async function askAiWithFallbackProviders({ prompt, systemPrompt, history, model } = {}) {
+  try {
+    const openRouterResult = await askAiWithOpenRouter({ prompt, systemPrompt, history, model });
+    return {
+      ...openRouterResult,
+      provider: 'openrouter',
+    };
+  } catch (openRouterError) {
+    console.error('OpenRouter error:', openRouterError.response?.data || openRouterError.message);
+
+    if (!groqClient || !shouldFallbackToGroq(openRouterError)) {
+      throw openRouterError;
+    }
+
+    try {
+      return await askAiWithGroq({ prompt, systemPrompt, history, model: process.env.GROQ_MODEL || GROQ_MODEL });
+    } catch (groqError) {
+      console.error('Groq fallback error:', groqError.response?.data || groqError.message);
+      throw openRouterError;
+    }
+  }
+}
+
+const telegramBotController = createTelegramBot({
+  token: process.env.TELEGRAM_BOT_TOKEN,
+  allowedChatId: process.env.TELEGRAM_ALLOWED_CHAT_ID || process.env.TELEGRAM_DEFAULT_CHAT_ID,
+  askAi: askAiWithFallbackProviders,
+});
+
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+const requestRateStore = new Map();
+const responseCacheStore = new Map();
+
+function createRateLimiter({ keyPrefix, windowMs, maxRequests }) {
+  return function rateLimitMiddleware(req, res, next) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const bucketKey = `${keyPrefix}:${ip}`;
+    const now = Date.now();
+    const current = requestRateStore.get(bucketKey);
+
+    if (!current || current.resetAt <= now) {
+      requestRateStore.set(bucketKey, {
+        count: 1,
+        resetAt: now + windowMs,
+      });
+      return next();
+    }
+
+    if (current.count >= maxRequests) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({
+        error: 'Too many requests. Please retry shortly.',
+        retryAfterSeconds,
+      });
+    }
+
+    current.count += 1;
+    requestRateStore.set(bucketKey, current);
+    return next();
+  };
+}
+
+function createCacheMiddleware({ keyPrefix, ttlMs }) {
+  return function cacheMiddleware(req, res, next) {
+    const bodyKey = req.method === 'POST' ? JSON.stringify(req.body || {}) : '';
+    const cacheKey = `${keyPrefix}:${req.method}:${req.originalUrl}:${bodyKey}`;
+    const now = Date.now();
+    const cached = responseCacheStore.get(cacheKey);
+
+    if (cached && cached.expiresAt > now) {
+      res.setHeader('X-Cache', 'HIT');
+      return res.status(cached.status).json(cached.payload);
+    }
+
+    if (cached && cached.expiresAt <= now) {
+      responseCacheStore.delete(cacheKey);
+    }
+
+    const originalJson = res.json.bind(res);
+    res.json = (payload) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        responseCacheStore.set(cacheKey, {
+          status: res.statusCode,
+          payload,
+          expiresAt: now + ttlMs,
+        });
+        res.setHeader('X-Cache', 'MISS');
+      }
+      return originalJson(payload);
+    };
+
+    return next();
+  };
+}
+
+const aiRateLimiter = createRateLimiter({
+  keyPrefix: 'ai',
+  windowMs: Number(process.env.AI_RATE_WINDOW_MS) || 60_000,
+  maxRequests: Number(process.env.AI_RATE_MAX_REQUESTS) || 20,
+});
+
+const marketRateLimiter = createRateLimiter({
+  keyPrefix: 'market',
+  windowMs: Number(process.env.MARKET_RATE_WINDOW_MS) || 60_000,
+  maxRequests: Number(process.env.MARKET_RATE_MAX_REQUESTS) || 120,
+});
+
+const heavyRouteRateLimiter = createRateLimiter({
+  keyPrefix: 'market-heavy',
+  windowMs: Number(process.env.MARKET_HEAVY_WINDOW_MS) || 60_000,
+  maxRequests: Number(process.env.MARKET_HEAVY_MAX_REQUESTS) || 12,
+});
+
+const aiCache = createCacheMiddleware({
+  keyPrefix: 'ai-chat',
+  ttlMs: Number(process.env.AI_CACHE_TTL_MS) || 20_000,
+});
+
+const marketCacheShort = createCacheMiddleware({
+  keyPrefix: 'market-short',
+  ttlMs: Number(process.env.MARKET_CACHE_SHORT_TTL_MS) || 15_000,
+});
+
+const marketCacheLong = createCacheMiddleware({
+  keyPrefix: 'market-long',
+  ttlMs: Number(process.env.MARKET_CACHE_LONG_TTL_MS) || 60_000,
+});
+
+app.post('/api/ai/chat', aiRateLimiter, aiCache, async (req, res) => {
+  const { message, prompt, systemPrompt, history, model } = req.body || {};
+  const userPrompt = message || prompt;
+
+  if (!userPrompt && !Array.isArray(history)) {
+    return res.status(400).json({ error: 'message (or prompt) or history is required' });
+  }
+
+  try {
+    const result = await askAiWithFallbackProviders({
+      prompt: userPrompt,
+      systemPrompt,
+      history,
+      model,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('OpenRouter error:', error.response?.data || error.message);
+    if (String(error.message || '').includes('OPENROUTER_API_KEY')) {
+      return res.status(503).json({ error: error.message });
+    }
+    if (Number(error.status || error.response?.status) === 429) {
+      return res.status(429).json({ error: error.message || 'AI temporarily rate-limited. Please retry shortly.' });
+    }
+    return res.status(500).json({ error: 'AI request failed' });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // CoinGecko — free public API, no key required, works globally
@@ -136,7 +471,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Route: GET /market-token
 // Returns price info for all tracked tokens
 // ---------------------------------------------------------------------------
-app.get('/market-token', async (req, res) => {
+app.get('/market-token', heavyRouteRateLimiter, marketCacheLong, async (req, res) => {
   const results = [];
 
   for (let i = 0; i < tokens.length; i++) {
@@ -153,7 +488,7 @@ app.get('/market-token', async (req, res) => {
 // Route: GET /api/get-token-price/:chainIndex/:tokenContractAddress
 // Returns price info for a single token via CoinGecko
 // ---------------------------------------------------------------------------
-app.get('/api/get-token-price/:chainIndex/:tokenContractAddress', async (req, res) => {
+app.get('/api/get-token-price/:chainIndex/:tokenContractAddress', marketRateLimiter, marketCacheShort, async (req, res) => {
   const { chainIndex, tokenContractAddress } = req.params;
 
   if (!tokenContractAddress || !chainIndex) {
@@ -179,7 +514,7 @@ const barToDays = {
   '1H': 1, '4H': 7, '1D': 30, '1W': 90, '1M': 365,
 };
 
-app.get('/api/market-chart/:chainIndex/:tokenContractAddress', async (req, res) => {
+app.get('/api/market-chart/:chainIndex/:tokenContractAddress', marketRateLimiter, marketCacheShort, async (req, res) => {
   const { chainIndex, tokenContractAddress } = req.params;
   const { bar = '1D' } = req.query;
 
@@ -265,7 +600,7 @@ async function fetchUniswapTokenData(chainId, tokenAddress) {
   };
 }
 
-app.get('/api/token/:chainId/:address', async (req, res) => {
+app.get('/api/token/:chainId/:address', marketRateLimiter, marketCacheShort, async (req, res) => {
   const { chainId, address } = req.params;
   const numericChainId = Number(chainId);
 
@@ -291,7 +626,7 @@ app.get('/api/token/:chainId/:address', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Binance price endpoint (unchanged — works globally)
 // ---------------------------------------------------------------------------
-app.get('/api/binance-price/:symbol', async (req, res) => {
+app.get('/api/binance-price/:symbol', marketRateLimiter, marketCacheShort, async (req, res) => {
   const { symbol } = req.params;
   try {
     const response = await axios.get(
@@ -307,7 +642,7 @@ app.get('/api/binance-price/:symbol', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Coinbase price endpoint (unchanged — works globally)
 // ---------------------------------------------------------------------------
-app.get('/api/coinbase-price/:symbol', async (req, res) => {
+app.get('/api/coinbase-price/:symbol', marketRateLimiter, marketCacheShort, async (req, res) => {
   const { symbol } = req.params;
 
   if (!symbol) {
@@ -331,6 +666,62 @@ app.get('/api/coinbase-price/:symbol', async (req, res) => {
   } catch (error) {
     console.error('Error fetching Coinbase price:', error.message);
     return res.status(500).json({ error: 'Failed to fetch price from Coinbase' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Signal endpoint (backend source of truth for Telegram/web clients)
+// ---------------------------------------------------------------------------
+app.get('/api/signal/:symbol', marketRateLimiter, marketCacheShort, async (req, res) => {
+  const { symbol } = req.params;
+  const threshold = Number(req.query?.threshold);
+  const thresholdPercent = Number.isFinite(threshold) && threshold > 0 ? threshold : 0.25;
+
+  if (!symbol) {
+    return res.status(400).json({ error: 'Symbol parameter is required, e.g. BTCUSDT' });
+  }
+
+  try {
+    const normalizedBinanceSymbol = String(symbol).trim().toUpperCase().replace('-', '').replace(/USD$/, 'USDT');
+    const normalizedCoinbaseSymbol = String(symbol).trim().toUpperCase().includes('-')
+      ? String(symbol).trim().toUpperCase()
+      : String(symbol).trim().toUpperCase().endsWith('USDT')
+        ? `${String(symbol).trim().toUpperCase().slice(0, -4)}-USD`
+        : String(symbol).trim().toUpperCase().endsWith('USD')
+          ? `${String(symbol).trim().toUpperCase().slice(0, -3)}-USD`
+          : `${String(symbol).trim().toUpperCase()}-USD`;
+
+    const [binanceResponse, coinbaseResponse] = await Promise.all([
+      axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${normalizedBinanceSymbol}`),
+      axios.get(`https://api.coinbase.com/v2/prices/${normalizedCoinbaseSymbol}/spot`),
+    ]);
+
+    const binancePrice = Number(binanceResponse.data?.price);
+    const coinbasePrice = Number(coinbaseResponse.data?.data?.amount);
+
+    if (!Number.isFinite(binancePrice) || !Number.isFinite(coinbasePrice) || binancePrice <= 0) {
+      return res.status(502).json({ error: 'Invalid price response from upstream exchange API' });
+    }
+
+    const delta = coinbasePrice - binancePrice;
+    const spreadPct = (Math.abs(delta) / binancePrice) * 100;
+    const buyAt = delta > 0 ? 'Binance' : 'Coinbase';
+    const sellAt = delta > 0 ? 'Coinbase' : 'Binance';
+    const shouldAlert = spreadPct >= thresholdPercent;
+
+    return res.json({
+      symbol: String(symbol).trim().toUpperCase(),
+      binancePrice,
+      coinbasePrice,
+      spreadPct,
+      buyAt,
+      sellAt,
+      thresholdPercent,
+      shouldAlert,
+    });
+  } catch (error) {
+    console.error('Signal API error:', error.response?.data || error.message);
+    return res.status(500).json({ error: 'Failed to fetch signal data' });
   }
 });
 
