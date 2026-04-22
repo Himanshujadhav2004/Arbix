@@ -3,20 +3,26 @@ const axios = require('axios');
 const crypto = require('crypto');
 const cors = require('cors');
 const querystring = require('querystring');
+require('dotenv').config();
 
 const { request, gql } = require('graphql-request');
+const {
+  createTelegramBot,
+  sendTelegramMessage,
+  buildArbitrageSignal,
+} = require('./telegramBot');
 
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 
 // Enable CORS
 app.use(cors());
 app.use(express.json()); // In case you want to parse JSON bodies later
 
 // Your API credentials — ideally move these to env vars
-const apiKey = '31cee890-8842-42eb-aab3-925956b5a3dc';
-const secretKey = 'CE25E2B1BF01FC2942835E384B9132CD';
-const passphrase = 'Yt6M7.zpDrk.kVP';
+const apiKey = process.env.OKX_API_KEY || '31cee890-8842-42eb-aab3-925956b5a3dc';
+const secretKey = process.env.OKX_SECRET_KEY || 'CE25E2B1BF01FC2942835E384B9132CD';
+const passphrase = process.env.OKX_PASSPHRASE || 'Yt6M7.zpDrk.kVP';
 
 const methodPost = 'POST';
 const requestPathPost = '/api/v5/dex/market/price-info';
@@ -228,7 +234,7 @@ app.get('/api/get-token-price/:chainIndex/:tokenContractAddress', async (req, re
 //   }
 // });
 
-const API_KEY = 'afc914943ff24797a37853beeff3ca51';
+const API_KEY = process.env.GRAPH_API_KEY || 'afc914943ff24797a37853beeff3ca51';
 
 const chainIdToSubgraphId = {
   1: '5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV',      // Mainnet Uniswap v3 subgraph ID
@@ -334,7 +340,78 @@ app.get('/api/coinbase-price/:symbol', async (req, res) => {
   }
 });
 
+const telegramBotController = createTelegramBot({
+  token: process.env.TELEGRAM_BOT_TOKEN,
+  allowedChatId: process.env.TELEGRAM_ALLOWED_CHAT_ID,
+});
+
+app.post('/api/telegram/notify', async (req, res) => {
+  const { message, chatId, secret } = req.body || {};
+
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'message is required and must be a string' });
+  }
+
+  if (
+    process.env.TELEGRAM_NOTIFY_SECRET &&
+    secret !== process.env.TELEGRAM_NOTIFY_SECRET
+  ) {
+    return res.status(401).json({ error: 'Unauthorized notifier request' });
+  }
+
+  const response = await sendTelegramMessage(telegramBotController.bot, message, {
+    chatId: chatId || process.env.TELEGRAM_DEFAULT_CHAT_ID,
+  });
+
+  if (!response.ok) {
+    return res.status(500).json({ error: response.error });
+  }
+
+  return res.status(200).json({ success: true, messageId: response.messageId });
+});
+
+app.post('/api/telegram/signal/:symbol', async (req, res) => {
+  const { symbol } = req.params;
+  const { chatId, thresholdPercent, secret } = req.body || {};
+
+  if (!symbol) {
+    return res.status(400).json({ error: 'symbol param is required, e.g. YFIUSDT' });
+  }
+
+  if (
+    process.env.TELEGRAM_NOTIFY_SECRET &&
+    secret !== process.env.TELEGRAM_NOTIFY_SECRET
+  ) {
+    return res.status(401).json({ error: 'Unauthorized notifier request' });
+  }
+
+  try {
+    const signal = await buildArbitrageSignal({
+      symbol,
+      thresholdPercent: Number(thresholdPercent) || 0.25,
+    });
+
+    const response = await sendTelegramMessage(telegramBotController.bot, signal.message, {
+      chatId: chatId || process.env.TELEGRAM_DEFAULT_CHAT_ID,
+    });
+
+    if (!response.ok) {
+      return res.status(500).json({ error: response.error, signal });
+    }
+
+    return res.status(200).json({ success: true, signal, messageId: response.messageId });
+  } catch (error) {
+    console.error('Failed to create Telegram signal:', error.message);
+    return res.status(500).json({ error: 'Failed to create Telegram signal' });
+  }
+});
+
 // Start server
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
+  if (telegramBotController.isEnabled) {
+    console.log('Telegram bot polling started');
+  } else {
+    console.log('Telegram bot is disabled (set TELEGRAM_BOT_TOKEN to enable)');
+  }
 });
